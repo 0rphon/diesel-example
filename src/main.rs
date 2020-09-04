@@ -52,11 +52,11 @@ pub fn add_word<'a>(word_val: &'a str, count_val: &'a i32) -> Result<Table, Box<
         word: word_val,
         count: count_val,
     };
-    diesel::insert_into(word_table::table)                       //insert into the table
+    diesel::insert_into(word_table::table)                  //insert into the table
         .values(&new_word)                                  //the word
         .execute(&connection)?;                             //into the db
-    let results = word_table::table                              //pull table to double check val was added
-        .filter(word.like(format!("%{}%", new_word.word)))  //filter to find the word entry
+    let results = word_table::table                         //pull table to double check val was added
+        .filter(word.eq(new_word.word))                     //filter to find the word entry
         .load::<Table>(&connection)?;                       //from db
     if results.len() == 1 {Ok(results[0].clone())}
     else{Err(Box::new(CustomError::AddError(word_val.to_string(), count_val.to_string())))}
@@ -67,14 +67,12 @@ pub fn add_word<'a>(word_val: &'a str, count_val: &'a i32) -> Result<Table, Box<
 //search for word in db
 fn search_word(word_val: &str) -> Result<Option<Table>, Box<dyn error::Error>>{
     let connection = SqliteConnection::establish(DATABASE_URL)?;
-    let results = word_table.limit(5)
+    let mut results = word_table
+        .filter(word.eq(word_val))
         .load::<Table>(&connection)?;
-    for result in results {
-        if result.word == word_val {
-            return Ok(Some(result))
-        }
-    }
-    Ok(None)
+    if let Some(w) = results.pop() {
+        Ok(Some(w))
+    } else {Ok(None)}
 }
 
 
@@ -93,8 +91,8 @@ fn edit_word(word_val: &str, count_val: i32) -> Result<(), Box<dyn error::Error>
     let _ = diesel::update(word_table.find(&word_val))
         .set(count.eq(count_val))
         .execute(&connection)?;
-    let results = word_table::table                              //pull table to double check val was added
-        .filter(word.like(format!("%{}%", word_val)))       //filter to find the word entry
+    let results = word_table::table                         //pull table to double check val was added
+        .filter(word.eq(word_val))                          //filter to find the word entry
         .load::<Table>(&connection)?;                       //from db
     if results.len() == 1 {if results[0].count==count_val {return Ok(())}}
     Err(Box::new(CustomError::AddError(word_val.to_string(), count_val.to_string())))
@@ -104,8 +102,8 @@ fn edit_word(word_val: &str, count_val: i32) -> Result<(), Box<dyn error::Error>
 
 fn del_word(word_val: &str) -> Result<(), Box<dyn error::Error>>{
     let connection = SqliteConnection::establish(DATABASE_URL)?;
-    let pattern = format!("%{}%", word_val);
-    diesel::delete(word_table.filter(word.like(pattern)))
+    diesel::delete(word_table
+        .filter(word.eq(word_val)))
         .execute(&connection)?;
     Ok(())
 }
